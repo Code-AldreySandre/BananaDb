@@ -20,10 +20,12 @@ def escreve_pagina(n,page_bytes):
     modo = 'r+b' if os.path.exists(DB_FILE) else 'w+b'
 
     with open(DB_FILE, modo) as f:
-        offset = n*PAGE_SIZE
+        offset = n * PAGE_SIZE
         f.seek(offset)
-        f.write(page_bytes)
-
+        f.write(page_bytes)     
+        f.flush()                
+        os.fsync(f.fileno())     
+        
 def ler_pagina(n):
     if not os.path.exists(DB_FILE):
         raise FileNotFoundError("Banco de dados não encontrado!")
