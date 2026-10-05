@@ -18,14 +18,34 @@ DB_FILE = "dados.db"
 MAGIC_NUMBER = b'MINIDB26'
 
 class Schema:
-    def __init__(self, formato="<ii"):
+    def __init__(self, colunas):
+        """
+        Deriva o formato do struct a partir de uma lista de tipos de colunas.
+        Ex: ['INT', 'INT'] vira '<ii' (little-endian, 2 inteiros de 4 bytes = 8 bytes).
+        """
+        mapa_tipos = {
+            'INT': 'i'
+        }
+        
+        formato = '<'
+        for col in colunas:
+            if col in mapa_tipos:
+                formato += mapa_tipos[col]
+            else:
+                raise ValueError(f"Tipo de coluna não suportado: {col}")
+                
         self.formato = formato
-        self.tamanho = struct.calcsize(formato)
+        self.tamanho = struct.calcsize(self.formato)
+        
+        if self.tamanho != RECORD_SIZE:
+            logger.warning(f"Aviso: O tamanho do esquema ({self.tamanho} bytes) difere de RECORD_SIZE ({RECORD_SIZE}).")
 
-def serializa(schema, val1, val2):
-    return struct.pack(schema.formato, val1, val2)
+def serializa(schema, *valores):
+    """Empacota uma quantidade variável de valores com base no esquema."""
+    return struct.pack(schema.formato, *valores)
 
 def desserializa(schema, dados_bytes):
+    """Desempacota os bytes de volta para uma tupla de valores."""
     return struct.unpack(schema.formato, dados_bytes)
 
 def _calcula_offset(n):
@@ -80,13 +100,14 @@ def ler_pagina(n):
 if __name__ == "__main__":
     inicializa_pagina_zero()
     
-    esquema_aluno = Schema("<ii")
+    esquema_aluno = Schema(['INT', 'INT'])
     
     num_pagina = aloca()
     pagina = ler_pagina(num_pagina)
     
     id_aluno = 1
     matricula = 20260001
+    
     registro_bytes = serializa(esquema_aluno, id_aluno, matricula)
     
     cabecalho_bytes = bytearray(HEADER_SIZE) 
