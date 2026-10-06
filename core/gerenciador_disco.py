@@ -1,7 +1,7 @@
 import os 
 import logging
 import struct
-
+from collections import OrderedDict
 logger = logging.getLogger("minidb")
 logger.setLevel(logging.DEBUG)
 
@@ -96,29 +96,104 @@ def ler_pagina(n):
         if not page_bytes:
             return bytearray(PAGE_SIZE)
         return bytearray(page_bytes)
+#Filipe
+class Pagina:
+    def __init__(self, numero: int, dados: bytearray):
+        self.numero = numero
+        self.dados = dados
+        self.pin_count = 0
+        self.is_dirty = False
 
+
+class CachePaginas:
+    def __init__(self, capacidade: int = 4):
+        self.capacidade = capacidade
+        self.frames: dict[int, Pagina] = {}
+        self.lru: OrderedDict[int, None] = OrderedDict()
+
+    def obter_pagina(self, n: int) -> Pagina:
+        if n in self.frames:
+            pag = self.frames[n]
+            pag.pin_count += 1
+            self.lru.pop(n, None)
+            return pag
+
+        if len(self.frames) >= self.capacidade:
+            self._desalojar_pagina()
+
+        dados_disco = ler_pagina(n)
+        pag = Pagina(n, dados_disco)
+        pag.pin_count = 1
+        pag.is_dirty = False
+
+        self.frames[n] = pag
+        return pag
+
+    def liberar_pagina(self, n: int, modificada: bool = False):
+        if n not in self.frames:
+            return
+
+        pag = self.frames[n]
+        if modificada:
+            pag.is_dirty = True
+
+        if pag.pin_count > 0:
+            pag.pin_count -= 1
+
+        if pag.pin_count == 0:
+            self.lru[n] = None
+            self.lru.move_to_end(n)
+
+    def _desalojar_pagina(self):
+        if not self.lru:
+            raise RuntimeError("Cache cheio: todas as páginas estão fixadas (pin_count > 0).")
+
+        num_vitima, _ = self.lru.popitem(last=False)
+        vitima = self.frames.pop(num_vitima)
+
+        if vitima.is_dirty:
+            escreve_pagina(vitima.numero, vitima.dados)
+            vitima.is_dirty = False
+
+    def flush_pagina(self, n: int):
+        if n in self.frames:
+            pag = self.frames[n]
+            if pag.is_dirty:
+                escreve_pagina(pag.numero, pag.dados)
+                pag.is_dirty = False
+
+    def flush_todas(self):
+        for pag in list(self.frames.values()):
+            if pag.is_dirty:
+                escreve_pagina(pag.numero, pag.dados)
+                pag.is_dirty = False
+#filipe
 if __name__ == "__main__":
     inicializa_pagina_zero()
-    
+
+    cache = CachePaginas(capacidade=4)
     esquema_aluno = Schema(['INT', 'INT'])
-    
+
     num_pagina = aloca()
-    pagina = ler_pagina(num_pagina)
-    
+    pagina = cache.obter_pagina(num_pagina)
+
     id_aluno = 1
     matricula = 20260001
-    
     registro_bytes = serializa(esquema_aluno, id_aluno, matricula)
-    
-    cabecalho_bytes = bytearray(HEADER_SIZE) 
-    pagina[0:HEADER_SIZE] = cabecalho_bytes
-    
+
+    cabecalho_bytes = bytearray(HEADER_SIZE)
+    pagina.dados[0:HEADER_SIZE] = cabecalho_bytes
+
     inicio_slot = HEADER_SIZE
     fim_slot = HEADER_SIZE + RECORD_SIZE
-    pagina[inicio_slot:fim_slot] = registro_bytes
-    
-    escreve_pagina(num_pagina, pagina)
-    pagina_lida = ler_pagina(num_pagina)
-    
-    registro_recuperado = desserializa(esquema_aluno, pagina_lida[inicio_slot:fim_slot])
-    print(f"Registro gravado e recuperado na página {num_pagina}: ID={registro_recuperado[0]}, Matricula={registro_recuperado[1]}")
+    pagina.dados[inicio_slot:fim_slot] = registro_bytes
+
+    cache.liberar_pagina(num_pagina, modificada=True)
+
+    pagina_lida = cache.obter_pagina(num_pagina)
+    registro_recuperado = desserializa(esquema_aluno, pagina_lida.dados[inicio_slot:fim_slot])
+    cache.liberar_pagina(num_pagina, modificada=False)
+
+    cache.flush_todas()
+
+    print(f"Registro gravado e recuperado na página {num_pagina}: ID={registro_recuperado[0]}, Matricula={registro_recuperado[1]}") #alterei isso tambem
