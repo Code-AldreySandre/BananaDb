@@ -10,13 +10,15 @@ from core.buffer_pool import (
 )
 
 FORMATO_HEADER = "<iiii"
-MAX_CHAVES = (PAGE_SIZE - HEADER_SIZE) // RECORD_SIZE
+MAX_CHAVES_FOLHA = (PAGE_SIZE - HEADER_SIZE) // RECORD_SIZE
+MAX_CHAVES_INTERNO = (PAGE_SIZE - HEADER_SIZE - 4) // 8
 
 
 class ArvoreBPlus:
-    def __init__(self, cache: CachePaginas, pagina_raiz: int | None = None, max_chaves: int = MAX_CHAVES):
+    def __init__(self, cache: CachePaginas, pagina_raiz: int | None = None, max_chaves: int | None = None):
         self.cache = cache
-        self.max_chaves = max_chaves
+        self.max_chaves_folha = max_chaves if max_chaves is not None else MAX_CHAVES_FOLHA
+        self.max_chaves_interno = max_chaves if max_chaves is not None else MAX_CHAVES_INTERNO
 
         if pagina_raiz is None:
             pag_raiz = self.cache.nova_pagina()
@@ -273,7 +275,7 @@ class ArvoreBPlus:
         pag_pai = self.cache.obter_pagina(num_pag_pai)
         _, num_chaves_pai, _, _ = self._ler_header(pag_pai)
 
-        if num_chaves_pai < self.max_chaves:
+        if num_chaves_pai < self.max_chaves_interno:
             self._inserir_no_interno(pag_pai, chave_promovida, filho_dir)
             self.cache.liberar_pagina(num_pag_pai, modificada=True)
         else:
@@ -287,7 +289,7 @@ class ArvoreBPlus:
         pag = self.cache.obter_pagina(num_folha)
         _, num_chaves, _, _ = self._ler_header(pag)
 
-        if num_chaves < self.max_chaves:
+        if num_chaves < self.max_chaves_folha:
             self._inserir_na_folha(pag, chave, reg_bytes)
             self.cache.liberar_pagina(num_folha, modificada=True)
         else:
