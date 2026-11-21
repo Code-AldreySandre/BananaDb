@@ -33,8 +33,8 @@ class Schema:
         self.tamanho = struct.calcsize(self.formato)
         
         if self.tamanho != RECORD_SIZE:
-            logger.warning(f"Aviso: O tamanho do esquema ({self.tamanho} bytes) difere de RECORD_SIZE ({RECORD_SIZE}).")
-
+            raise ValueError(
+                f"Aviso: O tamanho do esquema ({self.tamanho} bytes) deve ser igual a RECORD_SIZE ({RECORD_SIZE} bytes).")
 def serializa(schema, *valores):
     return struct.pack(schema.formato, *valores)
 

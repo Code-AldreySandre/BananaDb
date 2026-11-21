@@ -289,6 +289,14 @@ class ArvoreBPlus:
         pag = self.cache.obter_pagina(num_folha)
         _, num_chaves, _, _ = self._ler_header(pag)
 
+        for i in range(num_chaves):
+            chave_existente, _ = self._ler_slot_folha(pag, i)
+            if chave_existente == chave:
+                self.cache.liberar_pagina(num_folha, modificada=False)
+                raise ValueError(f"Chave duplicada: {chave}")
+            if chave_existente > chave:
+                break
+
         if num_chaves < self.max_chaves_folha:
             self._inserir_na_folha(pag, chave, reg_bytes)
             self.cache.liberar_pagina(num_folha, modificada=True)
