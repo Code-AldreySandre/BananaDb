@@ -24,6 +24,9 @@ class Catalogo:
         if self.cache is None or self.pagina_catalogo is None:
             return
 
+        self.tabelas.clear()
+        pag = self.cache.obter_pagina(self.pagina_catalogo)
+
         pag = self.cache.obter_pagina(self.pagina_catalogo)
         try:
             tamanho = struct.unpack_from("<I", pag.dados, 0)[0]

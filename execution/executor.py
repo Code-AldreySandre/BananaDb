@@ -16,7 +16,22 @@ class Executor:
         self.cache = cache
         self.tx_manager = tx_manager
         self.arvores = {}
+        self.tx_manager.on_rollback = self.recarregar_estado
+        self._carregar_arvores()
 
+    def _carregar_arvores(self):
+        self.arvores = {}
+        for nome in self.catalogo.listar_tabelas():
+            raiz = self.catalogo.obter_raiz(nome)
+            self.arvores[nome] = ArvoreBPlus(
+                self.cache,
+                pagina_raiz=raiz,
+                on_root_change=lambda nova_raiz, t=nome: self.catalogo.atualizar_raiz(t, nova_raiz),
+            )
+
+    def recarregar_estado(self):
+        self.catalogo.carregar()
+        self._carregar_arvores()
         for nome in self.catalogo.listar_tabelas():
             raiz = self.catalogo.obter_raiz(nome)
             self.arvores[nome] = ArvoreBPlus(
@@ -79,15 +94,24 @@ class Executor:
         if arvore.buscar(chave) is not None:
             raise ValueError(f"Chave duplicada na tabela '{ast.tabela}': {chave}")
 
-        if self.tx_manager.transacao_atual:
+        autocommit = self.tx_manager.transacao_atual is None
+        if autocommit:
+            self.tx_manager.begin()
+
+        try:
             tx_id = self.tx_manager.transacao_atual.tx_id
             self.tx_manager.wal_manager.log_insert(tx_id, ast.tabela, chave, reg_bytes.hex())
-
-        arvore.inserir(chave, reg_bytes)
+            arvore.inserir(chave, reg_bytes)
+            if autocommit:
+                self.tx_manager.commit()
+        except Exception:
+            if autocommit and self.tx_manager.transacao_atual is not None:
+                self.tx_manager.rollback()
+            raise
 
         logger.info(f"Registro com chave {chave} inserido na tabela '{ast.tabela}'.")
         return "OK 1"
-
+    
     def _executar_select(self, ast: Select) -> str:
         if ast.tabela not in self.arvores:
             raise ValueError(f"Tabela '{ast.tabela}' não encontrada no catálogo.")

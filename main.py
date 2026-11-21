@@ -14,7 +14,7 @@ def main():
     cache = CachePaginas(capacidade=8, db_file=db_path)
     catalogo = Catalogo(cache)
     parser = ParserSQL()
-    wal_manager = WALManager()
+    wal_manager = WALManager(wal_file=f"{db_path}.wal")
     tx_manager = GerenciadorTransacoes(cache, wal_manager)
     executor = Executor(catalogo, cache, tx_manager)
 

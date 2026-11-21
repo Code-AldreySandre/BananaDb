@@ -1,13 +1,15 @@
 from collections import OrderedDict
+from collections.abc import Callable
 from core.gerenciador_disco import (
-    ler_pagina, 
-    escreve_pagina, 
-    aloca, 
-    PAGE_SIZE, 
-    HEADER_SIZE, 
-    RECORD_SIZE, 
-    DB_FILE
+    ler_pagina,
+    escreve_pagina,
+    aloca,
+    PAGE_SIZE,
+    HEADER_SIZE,
+    RECORD_SIZE,
+    DB_FILE,
 )
+
 
 class Pagina:
     def __init__(self, numero: int, dados: bytearray):
@@ -30,12 +32,20 @@ class Pagina:
             raise ValueError("Índice de slot ultrapassa o limite da página.")
         return self.dados[inicio:fim]
 
+
 class CachePaginas:
     def __init__(self, capacidade: int = 4, db_file: str = DB_FILE):
         self.capacidade = capacidade
         self.db_file = db_file
         self.frames: dict[int, Pagina] = {}
         self.lru: OrderedDict[int, None] = OrderedDict()
+        self.on_before_write: Callable[[int], None] | None = None
+
+    def _gravar_no_disco(self, pag: Pagina):
+        if self.on_before_write is not None:
+            self.on_before_write(pag.numero)
+        escreve_pagina(pag.numero, pag.dados, db_file=self.db_file)
+        pag.is_dirty = False
 
     def obter_pagina(self, n: int) -> Pagina:
         if n in self.frames:
@@ -82,18 +92,19 @@ class CachePaginas:
         vitima = self.frames.pop(num_vitima)
 
         if vitima.is_dirty:
-            escreve_pagina(vitima.numero, vitima.dados, db_file=self.db_file)
-            vitima.is_dirty = False
+            self._gravar_no_disco(vitima)
 
     def flush_pagina(self, n: int):
         if n in self.frames:
             pag = self.frames[n]
             if pag.is_dirty:
-                escreve_pagina(pag.numero, pag.dados, db_file=self.db_file)
-                pag.is_dirty = False
+                self._gravar_no_disco(pag)
 
     def flush_todas(self):
         for pag in list(self.frames.values()):
             if pag.is_dirty:
-                escreve_pagina(pag.numero, pag.dados, db_file=self.db_file)
-                pag.is_dirty = False
+                self._gravar_no_disco(pag)
+
+    def limpar(self):
+        self.frames.clear()
+        self.lru.clear()
