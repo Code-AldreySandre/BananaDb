@@ -17,6 +17,13 @@ class Executor:
         self.tx_manager = tx_manager
         self.arvores = {}
 
+        for nome in self.catalogo.listar_tabelas():
+            raiz = self.catalogo.obter_raiz(nome)
+            self.arvores[nome] = ArvoreBPlus(
+                self.cache,
+                pagina_raiz=raiz,
+                on_root_change=lambda nova_raiz, t=nome: self.catalogo.atualizar_raiz(t, nova_raiz),
+            )
     def executar(self, ast) -> str:
         if isinstance(ast, Begin):
             return self.tx_manager.begin()
@@ -35,8 +42,13 @@ class Executor:
         
     def _executar_create(self, ast: CreateTable) -> str:
         self.catalogo.criar_tabela(ast.tabela, ast.colunas)
-        self.arvores[ast.tabela] = ArvoreBPlus(self.cache)
-        logger.info(f"Tabela '{ast.tabela}' e índice B+ inicializados.")
+        arvore = ArvoreBPlus(
+            self.cache,
+            on_root_change=lambda nova_raiz, t=ast.tabela: self.catalogo.atualizar_raiz(t, nova_raiz),
+        )
+        self.catalogo.atualizar_raiz(ast.tabela, arvore.pagina_raiz)
+        self.arvores[ast.tabela] = arvore
+        logger.info(f"Tabela '{ast.tabela}' e índice B+ inicializados na raiz {arvore.pagina_raiz}.")
         return "OK"
 
     def _validar_int32(self, valor, nome_coluna: str):

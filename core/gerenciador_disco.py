@@ -62,8 +62,23 @@ def aloca(db_file: str = DB_FILE) -> int:
 def inicializa_pagina_zero(db_file: str = DB_FILE):
     if contagem_paginas(db_file) == 0:
         pagina_zero = bytearray(PAGE_SIZE)
-        struct.pack_into("<8si", pagina_zero, 0, MAGIC_NUMBER, PAGE_SIZE)
+        struct.pack_into("<8sii", pagina_zero, 0, MAGIC_NUMBER, PAGE_SIZE, 1)
         escreve_pagina(0, pagina_zero, db_file=db_file)
+
+        pagina_catalogo = bytearray(PAGE_SIZE)
+        struct.pack_into("<I", pagina_catalogo, 0, 0)
+        escreve_pagina(1, pagina_catalogo, db_file=db_file)
+
+def obter_pagina_catalogo(db_file: str = DB_FILE) -> int:
+    pagina_zero = ler_pagina(0, db_file=db_file)
+    magic, page_size, pag_cat = struct.unpack_from("<8sii", pagina_zero, 0)
+    if magic != MAGIC_NUMBER or page_size != PAGE_SIZE:
+        raise ValueError("Arquivo de banco de dados inválido ou corrompido.")
+    if pag_cat == 0:
+        pag_cat = aloca(db_file=db_file)
+        struct.pack_into("<i", pagina_zero, 12, pag_cat)
+        escreve_pagina(0, pagina_zero, db_file=db_file)
+    return pag_cat
 
 def escreve_pagina(n: int, page_bytes: bytearray, db_file: str = DB_FILE):
     if len(page_bytes) != PAGE_SIZE:

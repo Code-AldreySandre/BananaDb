@@ -1,3 +1,4 @@
+from collections.abc import Callable    
 import struct
 from core.gerenciador_disco import (
     PAGE_SIZE,
@@ -15,10 +16,17 @@ MAX_CHAVES_INTERNO = (PAGE_SIZE - HEADER_SIZE - 4) // 8
 
 
 class ArvoreBPlus:
-    def __init__(self, cache: CachePaginas, pagina_raiz: int | None = None, max_chaves: int | None = None):
+    def __init__(
+        self,
+        cache: CachePaginas,
+        pagina_raiz: int | None = None,
+        max_chaves: int | None = None,
+        on_root_change: Callable[[int], None] | None = None,
+    ):
         self.cache = cache
         self.max_chaves_folha = max_chaves if max_chaves is not None else MAX_CHAVES_FOLHA
         self.max_chaves_interno = max_chaves if max_chaves is not None else MAX_CHAVES_INTERNO
+        self.on_root_change = on_root_change
 
         if pagina_raiz is None:
             pag_raiz = self.cache.nova_pagina()
@@ -28,7 +36,7 @@ class ArvoreBPlus:
             self.cache.flush_pagina(self.pagina_raiz)
         else:
             self.pagina_raiz = pagina_raiz
-
+            
     def _ler_header(self, pag: Pagina) -> tuple[int, int, int, int]:
         return struct.unpack_from(FORMATO_HEADER, pag.dados, 0)
 
@@ -269,6 +277,9 @@ class ArvoreBPlus:
             self.cache.liberar_pagina(pag_nova_raiz.numero, modificada=True)
             self.cache.flush_pagina(pag_nova_raiz.numero)
             self.pagina_raiz = pag_nova_raiz.numero
+            if self.on_root_change:
+                self.on_root_change(self.pagina_raiz)
+            return
             return
 
         num_pag_pai = caminho.pop()
